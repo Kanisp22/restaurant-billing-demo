@@ -57,10 +57,13 @@ jobs:
           path: demo-node-app.tar
 
       - name: Push to GHCR (optional)
-        if: ${{ secrets.CR_PAT != '' }}
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
         run: |
+          if [ -z "${CR_PAT}" ]; then
+            echo "CR_PAT not set; skipping push to GHCR"
+            exit 0
+          fi
           echo "${CR_PAT}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
