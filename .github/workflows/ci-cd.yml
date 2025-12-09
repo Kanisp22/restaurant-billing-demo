@@ -13,7 +13,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/demo-node-app
+  IMAGE_NAME: ${{ toLower(github.repository_owner) }}/demo-node-app
   CONTAINER_NAME: demo-node-app
 
 jobs:
