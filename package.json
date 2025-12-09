@@ -1,0 +1,21 @@
+{
+  "name": "demo-node-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sample Node.js app for CI/CD pipeline demo",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "node src/__tests__/health.test.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
+

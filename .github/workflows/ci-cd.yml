@@ -1,0 +1,114 @@
+name: CI/CD - Demo Node App
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_tag:
+        description: 'Image tag to deploy (defaults to current SHA)'
+        required: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/demo-node-app
+  CONTAINER_NAME: demo-node-app
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          load: true
+          build-args: |
+            BUILD_ID=${{ github.sha }}
+
+      - name: Save image to tarball
+        run: docker save ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} -o demo-node-app.tar
+
+      - name: Save image as artifact (for local deploy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-node-app-image
+          path: demo-node-app.tar
+
+      - name: Push to GHCR (optional)
+        if: ${{ secrets.CR_PAT != '' }}
+        env:
+          CR_PAT: ${{ secrets.CR_PAT }}
+        run: |
+          echo "${CR_PAT}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  deploy-local:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      IMAGE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_tag || github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: demo-node-app-image
+
+      - name: Load image
+        run: docker load -i demo-node-app.tar
+
+      - name: Deploy container
+        run: |
+          chmod +x scripts/deploy.sh scripts/rollback.sh
+          ./scripts/deploy.sh \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            --name ${{ env.CONTAINER_NAME }}
+
+      - name: Smoke check
+        run: curl -fsS http://localhost:3000/healthz
+
+      - name: Show running container
+        run: docker ps --filter "name=${{ env.CONTAINER_NAME }}" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+
+  rollback-on-failure:
+    needs: deploy-local
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Attempt rollback to latest tag
+        run: |
+          chmod +x scripts/rollback.sh
+          ./scripts/rollback.sh \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            --name ${{ env.CONTAINER_NAME }}
+

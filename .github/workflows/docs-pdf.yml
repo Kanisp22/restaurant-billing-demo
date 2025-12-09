@@ -1,0 +1,26 @@
+name: Build Docs PDF
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build-pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Generate PDF
+        run: npx md-to-pdf docs/pipeline-notes.md -o docs/pipeline-notes.pdf
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-notes-pdf
+          path: docs/pipeline-notes.pdf
+
